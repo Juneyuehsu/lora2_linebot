@@ -1,67 +1,15 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
 import os
 import math
 
 app = Flask(__name__)
 
-# 設定你的Line Bot的Channel Access Token和Channel Secret
-LINE_CHANNEL_ACCESS_TOKEN = 'EcWhlpO8LQNE9BJ250/ulLRkAyND84VtRWS24Eforj2vi8yb2mNoqofnWsjtO89/z5KEHe6AKhAbIC6NmkFNKvZieC7t2SsOdopQHlfJnq4EYVvfwIc6mhBis+aOjZU9R+Efq/eXA71oynsGh8oDvwdB04t89/1O/w1cDnyilFU='
-LINE_CHANNEL_SECRET = '03f5a604171a37cb9ffa82be800bd72e'
-
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-@app.route("/callback", methods=['POST'])
-def callback():
-    # 確認請求來自Line
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
-
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-
-    return 'OK'
-
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    user_message = event.message.text
-    
-    # 將用戶輸入解析成參數
-    try:
-        params = user_message.split(',')
-        sf = int(params[0].strip())
-        bw = float(params[1].strip())
-        cr = float(params[2].strip())
-        payload_length = float(params[3].strip())
-        preamble_length = float(params[4].strip())
-        tx_power = float(params[5].strip())
-        tx_gain = float(params[6].strip())
-        rx_gain = float(params[7].strip())
-        frequency = float(params[8].strip())
-        noise_figure = float(params[9].strip())
-        ple_values = [float(ple) for ple in params[10:]]
-
-        ple = sum(ple_values) / len(ple_values)
-        
-        # 計算結果
-        result = calculate_lora(sf, bw, cr, payload_length, preamble_length, tx_power, tx_gain, rx_gain, frequency, noise_figure, ple)
-        
-        # 構建回覆訊息
-        reply_message = f"有效數據速率: {result['effective_data_rate']} kbps\n空中時間: {result['time_on_air']} ms\n最大傳輸距離: {result['max_distance']} km\n接收靈敏度: {result['receiver_sensitivity']} dBm"
-    except Exception as e:
-        reply_message = f"錯誤: {str(e)}\n請依照格式輸入參數：SF, BW, CR, Payload Length, Preamble Length, Tx Power, Tx Gain, Rx Gain, Frequency, Noise Figure, PLEs (用逗號分隔)"
-
-    # 回應用戶的訊息
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=reply_message)
-    )
+# 設置Line Bot的Channel Access Token和Channel Secret
+line_bot_api = LineBotApi('/CJFLhYsy8U8EIFUhjpJ0tVTxS5y1akXvOa7KZwcV06guiDwAIdn92xHhx/iErlxz5KEHe6AKhAbIC6NmkFNKvZieC7t2SsOdopQHlfJnq7XaPKcENJj43unpHMRh48H1yR/43eTaY12YFYmO+r2dQdB04t89/1O/w1cDnyilFU=')
+handler = WebhookHandler('03f5a604171a37cb9ffa82be800bd72e')
 
 def calculate_lora(sf, bw, cr, payload_length, preamble_length, tx_power, tx_gain, rx_gain, frequency, noise_figure, ple):
     # Calculate symbol duration (ms)
@@ -107,5 +55,102 @@ def calculate_lora(sf, bw, cr, payload_length, preamble_length, tx_power, tx_gai
         'receiver_sensitivity': receiver_sensitivity
     }
 
+@app.route("/callback", methods=['POST'])
+def callback():
+    # get X-Line-Signature header value
+    signature = request.headers['X-Line-Signature']
+
+    # get request body as text
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
+
+    # handle webhook body
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    user_message = event.message.text
+    if user_message.lower() == 'calculate':
+        # Send Flex Message for user to input parameters
+        line_bot_api.reply_message(
+            event.reply_token,
+            FlexSendMessage(
+                alt_text="Parameter Input",
+                contents={
+                    "type": "bubble",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "Please enter the parameters:",
+                                "weight": "bold",
+                                "size": "md"
+                            },
+                            {
+                                "type": "separator",
+                                "margin": "md"
+                            },
+                            {
+                                "type": "text",
+                                "text": "SF, BW, CR, Payload Length, Preamble Length, Tx Power, Tx Gain, Rx Gain, Frequency, Noise Figure, PLEs",
+                                "size": "sm",
+                                "color": "#AAAAAA",
+                                "wrap": True
+                            }
+                        ]
+                    },
+                    "footer": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "button",
+                                "style": "primary",
+                                "action": {
+                                    "type": "message",
+                                    "label": "Enter Parameters",
+                                    "text": "Enter parameters in the format: SF, BW, CR, Payload Length, Preamble Length, Tx Power, Tx Gain, Rx Gain, Frequency, Noise Figure, PLEs"
+                                }
+                            }
+                        ]
+                    }
+                }
+            )
+        )
+    else:
+        try:
+            params = user_message.split(',')
+            if len(params) != 11:
+                raise ValueError("Invalid number of parameters")
+            
+            result = calculate_lora(
+                int(params[0]), float(params[1]), float(params[2]), float(params[3]),
+                float(params[4]), float(params[5]), float(params[6]), float(params[7]),
+                float(params[8]), float(params[9]), sum(map(float, params[10].split('+')))
+            )
+            
+            response_message = f"有效數據速率: {result['effective_data_rate']:.2f} kbps\n"
+            response_message += f"空中時間: {result['time_on_air']:.2f} ms\n"
+            response_message += f"最大傳輸距離: {result['max_distance']:.2f} km\n"
+            response_message += f"接收靈敏度: {result['receiver_sensitivity']:.2f} dBm"
+            
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=response_message)
+            )
+        except Exception as e:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=f"錯誤: {str(e)}\n請依照格式輸入參數： SF, BW, CR, Payload Length, Preamble Length, Tx Power, Tx Gain, Rx Gain, Frequency, Noise Figure, PLEs (用逗號分隔)")
+            )
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
+
