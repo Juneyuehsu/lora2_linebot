@@ -1,15 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import math
-import os
 
 app = Flask(__name__)
 
 # Line API credentials
-line_bot_api = LineBotApi('L1v3/MpC608IdWNP7eu4ZHsOeYdWzP6EADrI8/TvHz8JUCoCFq4F2XQFftUS/MVBz5KEHe6AKhAbIC6NmkFNKvZieC7t2SsOdopQHlfJnq4JSFMO2Fg5wBhIlJlnfB1k/x4UvwVN/e46iVf2saNcggdB04t89/1O/w1cDnyilFU=')
-handler = WebhookHandler('6ee9665923b90570948a7d3e9828899a')
+line_bot_api = LineBotApi('YOUR_CHANNEL_ACCESS_TOKEN')
+handler = WebhookHandler('YOUR_CHANNEL_SECRET')
 
 def calculate_lora(sf, bw, cr, payload_length, preamble_length, tx_power, tx_gain, rx_gain, frequency, noise_figure, ple):
     symbol_duration = (2 ** sf) / (bw * 1000)
@@ -78,5 +77,27 @@ def handle_message(event):
         TextSendMessage(text=response)
     )
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.json
+    result = calculate_lora(
+        int(data['sf']),
+        float(data['bw']),
+        float(data['cr'].split('/')[1]),
+        float(data['payload_length']),
+        float(data['preamble_length']),
+        float(data['tx_power']),
+        float(data['tx_gain']),
+        float(data['rx_gain']),
+        float(data['frequency']),
+        float(data['noise_figure']),
+        float(sum(data['ple']))  # Sum of selected PLE values
+    )
+    return jsonify(result)
+
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)

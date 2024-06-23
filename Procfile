@@ -1,1 +1,1 @@
-web gunicorn app:lora_linebot
+web gunicorn app:app
